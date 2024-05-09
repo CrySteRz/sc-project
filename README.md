@@ -1,5 +1,5 @@
 ## Overview
-imple implementations of three well-known encryption algorithms: DES (Data Encryption Standard), RSA (Rivest–Shamir–Adleman), and Blowfish.
+Simple implementations of three well-known encryption algorithms: DES (Data Encryption Standard), RSA (Rivest–Shamir–Adleman), and Blowfish.
 
 ## Contents
  - Blowfish.py: Implementation of the Blowfish encryption algorithm.
