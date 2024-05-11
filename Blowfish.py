@@ -1,4 +1,5 @@
-# p-array
+import os
+# P - Array
 p = [
       0x243F6A88, 0x85A308D3, 0x13198A2E, 0x03707344,
       0xA4093822, 0x299F31D0, 0x082EFA98, 0xEC4E6C89,
@@ -6,7 +7,7 @@ p = [
       0xC0AC29B7, 0xC97C50DD, 0x3F84D5B5, 0xB5470917,
       0x9216D5D9, 0x8979FB1B
   ]
-# substitution boxes
+# Substitution boxes
 s = [
       [
           0xD1310BA6, 0x98DFB5AC, 0x2FFD72DB, 0xD01ADFB7,
@@ -273,11 +274,7 @@ s = [
           0xB74E6132, 0xCE77E25B, 0x578FDFE3, 0x3AC372E6
       ]
 ]
-# key array
-key = [ 0x4B7A70E9, 0xB5B32944, 0xDB75092E, 0xC4192623,
-        0xAD6EA6B0, 0x49A7DF7D, 0x9CEE60B8, 0x8FEDB266,
-        0xECAA8C71, 0x699A17FF, 0x5664526C, 0xC2B19EE1,
-        0x193602A5, 0x75094C29]
+
 # Function to calculate the value of the s-boxes
 def calculate(L):
     temp = s[0][L >> 24]
@@ -285,6 +282,7 @@ def calculate(L):
     temp = temp ^ s[2][L >> 8 & 0xff]
     temp = (temp + s[3][L & 0xff]) % (0x1<<32)
     return temp
+
 # Function to encrypt the data
 def encrypt(data):
         L = data>>32
@@ -299,6 +297,7 @@ def encrypt(data):
         R = R^p[16]
         encrypted = (L<<32) ^ R
         return encrypted
+
 # Function to decrypt the data
 def decrypt(data):
     L = data >> 32
@@ -315,60 +314,150 @@ def decrypt(data):
     data_decrypted1 = (L<<32) ^ R
     return data_decrypted1
 
+# Function to initialize the blowfish algorithm with the generated key
+def initialize_blowfish(key):
+    key = [int.from_bytes(key[i:i+4], 'big') for i in range(0, len(key), 4)]
+    for i in range(0,18):
+        p[i] = p[i]^key[i%14]
+    x = 0
+    data = 0
+    for i in range(0,9):
+        temp = encrypt(data)
+        p[x] = temp >> 32
+        x+=1
+        p[x] = temp & 0xffffffff
+        x+=1
+        data = temp
 
-for i in range(0,18):
-    p[i] = p[i]^key[i%14]
-x = 0
-data = 0
-for i in range(0,9):
-    temp = encrypt(data)
-    p[x] = temp >> 32
-    x+=1
-    p[x] = temp & 0xffffffff
-    x+=1
-    data = temp
+# Functions to handle the file operations
+def read_file_as_binary(file_path):
+    with open(file_path, 'rb') as file:
+        return file.read()
+    
+# Function to write the file from binary
+def write_file_from_binary(data, file_path):
+    with open(file_path, 'wb') as file:
+        file.write(data)
 
-# Function to convert the string to blocks
-def str_to_blocks(s):
-    s_bytes = s.encode('utf-8')
-    padding_length = 8 - len(s_bytes) % 8
-    s_bytes += bytes([padding_length] * padding_length)
-    return [int.from_bytes(s_bytes[i:i+8], 'big') for i in range(0, len(s_bytes), 8)]
+# Function to handle the key file
+def handle_key_file(file_path='blowfish_key'):
+    if os.path.exists(file_path) and os.path.getsize(file_path) > 0 and len(read_file_as_binary(file_path)) >= 56:
+            print("There is an existing key file. Do you want to use this key? (y/n)")
+            choice = input().lower()
+            if choice == 'y':
+                key = read_file_as_binary(file_path)
+                return key
+            if choice == 'n':
+                print("Generating a new key.")
+                gen_key = generate_key()
+                write_file_from_binary(gen_key, file_path)
+                return gen_key
+    else:
+        print("Generating a new key, because the key file does not exist or is empty.")
+        new_key = generate_key()
+        write_file_from_binary(new_key, file_path)
+        return new_key
+    
+# Function to generate a key of 56 bytes or 448 bits
+def generate_key():
+    return os.urandom(56)
 
-# Function to convert the blocks to string
-def blocks_to_str(blocks):
+# function to convert the file to blocks
+def file_to_blocks(data, block_size=8):
+    padding_length = (block_size - len(data) % block_size) % block_size
+    padded_data = data + bytes([padding_length] * padding_length)
+    blocks = [int.from_bytes(padded_data[i:i + block_size], 'big') for i in range(0, len(padded_data), block_size)]
+    return blocks
+
+# function to convert the blocks to file format for encryption
+def blocks_to_file_encryption(blocks):
+    data = b''.join(block.to_bytes(8, 'big') for block in blocks)
+    return data
+
+# function to convert the blocks to file format for decryption
+def blocks_to_file_decryption(blocks):
     data = b''.join(block.to_bytes(8, 'big') for block in blocks)
     padding_length = data[-1]
-    return data[:-padding_length].decode('utf-8')
+    return data[:-padding_length]
+    
+# function to encrypt the file    
+def encrypt_file(input_file_path, output_file_path, key):
+    data = read_file_as_binary(input_file_path)
+    if not data:
+        print("Error: Input file is empty or unreadable.")
+        return
+    blocks = file_to_blocks(data)
+    if not blocks:
+        print("Error: No blocks generated from input data.")
+        return
+    encrypted_blocks = []
+    for block in blocks:
+        encrypted_block = encrypt(block)
+        encrypted_blocks.append(encrypted_block)
+        #print(f"Block: {block} Encrypted: {encrypted_block}")
+    if not encrypted_blocks:
+        print("Error: Encryption produced no output.")
+        return
+    encrypted_data = blocks_to_file_encryption(encrypted_blocks)
+    if not encrypted_data:
+        print("Error: No encrypted data to write.")
+        return
+    write_file_from_binary(encrypted_data, output_file_path)
+    print(f"Encrypted data written to {output_file_path}.")
 
-# Function to encrypt the string
-def encrypt_string(s):
-    blocks = str_to_blocks(s)
-    encrypted_blocks = [encrypt(block) for block in blocks]
-    return encrypted_blocks
-
-# Function to decrypt the string
-def decrypt_string(blocks):
+# function to decrypt the file
+def decrypt_file(input_file_path, output_file_path, key):
+    data = read_file_as_binary(input_file_path)
+    blocks = file_to_blocks(data)
     decrypted_blocks = [decrypt(block) for block in blocks]
-    return blocks_to_str(decrypted_blocks)
+    #print (f"Decrypted Blocks:  {decrypted_blocks}")
+    decrypted_data = blocks_to_file_decryption(decrypted_blocks)
+    write_file_from_binary(decrypted_data, output_file_path)
+
+# Function to convert the string to blocks
+# def str_to_blocks(s):
+#     s_bytes = s.encode('utf-8')
+#     padding_length = 8 - len(s_bytes) % 8
+#     s_bytes += bytes([padding_length] * padding_length)
+#     return [int.from_bytes(s_bytes[i:i+8], 'big') for i in range(0, len(s_bytes), 8)]
+
+# # Function to convert the blocks to string
+# def blocks_to_str(blocks):
+#     data = b''.join(block.to_bytes(8, 'big') for block in blocks)
+#     padding_length = data[-1]
+#     return data[:-padding_length].decode('utf-8')
+
+# # Function to encrypt the string
+# def encrypt_string(s):
+#     blocks = str_to_blocks(s)
+#     encrypted_blocks = [encrypt(block) for block in blocks]
+#     return encrypted_blocks
+
+# # Function to decrypt the string
+# def decrypt_string(blocks):
+#     decrypted_blocks = [decrypt(block) for block in blocks]
+#     return blocks_to_str(decrypted_blocks)
+
 
 # Function to start the program
 # interact with the user to generate new keys, encrypt or decrypt messages
 def start():
+    key = handle_key_file()
+    initialize_blowfish(key)
     while True:
-        choice = input("Do you want to encrypt or decrypt data? (e/d) or quit (q): ").lower()
+        choice = input("Do you want to encrypt, decrypt a file or quit? (e/d/q): ").lower()
         if choice == 'e':
-            plaintext = input("Enter data to encrypt (text): ")
-            encrypted = encrypt_string(plaintext)
-            print("Encrypted data: ", encrypted)
+            input_path = input("Enter the path of the file to encrypt: ")
+            output_path = input_path + '.enc'
+            encrypt_file(input_path, output_path, key)
+            print("File encrypted successfully.")
         elif choice == 'd':
-            encrypted_input = input("Enter data to decrypt (list of integers, separated by spaces): ")
-            encrypted_blocks = list(map(int, encrypted_input.split()))
-            decrypted = decrypt_string(encrypted_blocks)
-            print("Decrypted data: ", decrypted)
+            input_path = input("Enter the path of the file to decrypt: ")
+            output_path = input_path + '.dec'
+            decrypt_file(input_path, output_path, key)
+            print("File decrypted successfully.")
         elif choice == 'q':
             print("Exiting.")
             break
         else:
-            print("Invalid choice. Please choose 'e' to encrypt, 'd' to decrypt, or 'q' to quit.")
-
+            print("Invalid choice. Please enter 'e', 'd', or 'q'.")

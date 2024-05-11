@@ -1,5 +1,5 @@
 import base64
-
+import os
 # initial permutation
 PI = [58, 50, 42, 34, 26, 18, 10, 2,
       60, 52, 44, 36, 28, 20, 12, 4,
@@ -183,89 +183,93 @@ def des_decrypt(data, key):
         new_right_half = [left ^ right for left, right in zip(permuted_data, left_half)]
         left_half = right_half
         right_half = new_right_half
-
     decrypted_data = final_permutation(right_half + left_half)
     return decrypted_data
 
-# function to convert a string to a list of bits
-def string_to_bits(s):
-    return [int(bit) for char in s.encode('utf-8') for bit in '{:08b}'.format(char)]
+# function to read bits from a file
+def read_bits_from_file(file_path):
+    with open(file_path, 'rb') as file:
+        data = file.read()
+    return [int(bit) for byte in data for bit in '{:08b}'.format(byte)]
 
-# function to convert a list of bits to a string
-def bits_to_string(bits):
-    bytes_list = [int(''.join(map(str, bits[i:i+8])), 2) for i in range(0, len(bits), 8)]
-    return bytes(bytes_list).decode('utf-8', errors='ignore')
-
-# function to pad the data to a multiple of the block size
-def pkcs7_pad(data, block_size):
-    padding_length = block_size - (len(data) % block_size)
-    padding = bytes([padding_length]) * padding_length
-    return data + padding
-
-# function to convert a list of bits to a base64 string
-def bits_to_base64(bits):
+# function to write bits to a file
+def write_bits_to_file(bits, file_path):
     bytes_array = bytes([int(''.join(map(str, bits[i:i+8])), 2) for i in range(0, len(bits), 8)])
-    return base64.b64encode(bytes_array).decode('utf-8')
+    with open(file_path, 'wb') as file:
+        file.write(bytes_array)
+# function to pad the bits to make the length a multiple of the block size
+def pad_bits(bits, block_size=64):
+    padding_required = (block_size - (len(bits) % block_size)) % block_size
+    bits.extend([0] * padding_required)
+    return bits
 
-# function to convert a base64 string to a list of bits
-def base64_to_bits(base64_string):
-    bytes_array = base64.b64decode(base64_string)
-    return [int(bit) for byte in bytes_array for bit in '{:08b}'.format(byte)]
-
-# function to encrypt a message using the DES algorithm
-def encrypt_string(plaintext, key_text):
-    key = string_to_bits(key_text)
-    block_size = 64
-    plaintext_padded = pkcs7_pad(plaintext.encode('utf-8'), block_size // 8)
-    plaintext_blocks = [plaintext_padded[i:i+block_size//8] for i in range(0, len(plaintext_padded), block_size//8)]
-    encrypted_blocks = []
-    for block in plaintext_blocks:
-        block_bits = [int(bit) for byte in block for bit in '{:08b}'.format(byte)]
-        encrypted_block = des_encrypt(block_bits, key)
-        encrypted_blocks.append(encrypted_block)
-    encrypted_bits_flat = [bit for block in encrypted_blocks for bit in block]
-    return bits_to_base64(encrypted_bits_flat)
-
-# function to decrypt a message using the DES algorithm
-def decrypt_string(encrypted_base64, key_text):
-    key = string_to_bits(key_text)
-    encrypted_bits = base64_to_bits(encrypted_base64)
-    block_size = 64
-    num_blocks = len(encrypted_bits) // block_size
-    decrypted_blocks = []
-    for i in range(num_blocks):
-        block_start = i * block_size
-        block_end = block_start + block_size
-        decrypted_block = des_decrypt(encrypted_bits[block_start:block_end], key)
-        decrypted_blocks.append(decrypted_block)
+# function to handle the key file
+def handle_key_file(file_path='DES_key'):
+    if os.path.exists(file_path) and os.path.getsize(file_path) > 0:
+        key_bits = read_bits_from_file(file_path)
+        if len(key_bits) >= 64:
+            print("There is an existing key file. Do you want to use this key? (y/n)")
+            choice = input().lower()
+            if choice == 'y':
+                return key_bits
+            if choice == 'n':
+                print("Generating a new key.")
+                key = generate_key()
+                write_bits_to_file(key, file_path)
+                return key
+    else:
+        print("Generating a new key, because the key file does not exist or is empty.")
+        key = generate_key()
+        write_bits_to_file(key, file_path)
+        return key
     
-    decrypted_bits_flat = [bit for block in decrypted_blocks for bit in block]
-    return bits_to_string(decrypted_bits_flat)
+# function to generate a random key            
+def generate_key():
+    return [os.urandom(1)[0] % 2 for _ in range(64)]
 
-# function to validate the encryption/decryption key
-def validate_key():
-    while True:
-        key_text = input("Enter encryption/decryption key (minimum 8 characters): ")
-        if len(key_text) >= 8:
-            return key_text
-        else:
-            print("Key must be at least 8 characters long. Please try again.")
+# function to remove the padding from the bits
+def remove_padding(bits):
+    while bits and bits[-1] == 0:
+        bits.pop()  
+    return bits
 
+# function to encrypt a file
+def encrypt_file(file_path, key):
+    bits = read_bits_from_file(file_path)
+    bits = pad_bits(bits)
+    encrypted_bits = []
+    for i in range(0, len(bits), 64):
+        block = bits[i:i+64]
+        encrypted_block = des_encrypt(block, key)
+        encrypted_bits.extend(encrypted_block)
+    write_bits_to_file(encrypted_bits, file_path + '.enc')
+
+# function to decrypt a file
+def decrypt_file(file_path, key):
+    bits = read_bits_from_file(file_path)
+    decrypted_bits = []
+    for i in range(0, len(bits), 64):
+        block = bits[i:i+64]
+        decrypted_block = des_decrypt(block, key)
+        decrypted_bits.extend(decrypted_block)
+    decrypted_bits = remove_padding(decrypted_bits)
+    write_bits_to_file(decrypted_bits, file_path + '.dec')
+    
 # function to start the DES encryption/decryption process
 # interact with the user to encrypt or decrypt messages
 def start():
     while True:
-        choice = input("Do you want to encrypt or decrypt data? (e/d) or quit (q): ").lower()
+        choice = input("Do you want to encrypt or decrypt data? (e/d), or quit (q): ").lower()
         if choice == 'e':
-            plaintext = input("Enter data to encrypt (text): ")
-            key_text = validate_key()
-            encrypted = encrypt_string(plaintext, key_text)
-            print("Encrypted data (Base64):", encrypted)
+            file_path = input("Enter the path of the file to encrypt: ")
+            key = handle_key_file()
+            encrypt_file(file_path, key)
+            print(f"File encrypted successfully. Output file: {file_path}.enc")
         elif choice == 'd':
-            encrypted_base64 = input("Enter data to decrypt (Base64 string): ")
-            key_text = validate_key()
-            decrypted = decrypt_string(encrypted_base64, key_text)
-            print("Decrypted data: ", decrypted)
+            file_path = input("Enter the path of the file to decrypt: ")
+            key = handle_key_file()
+            decrypt_file(file_path, key)
+            print(f"File decrypted successfully. Output file: {file_path}.dec")
         elif choice == 'q':
             print("Exiting.")
             break

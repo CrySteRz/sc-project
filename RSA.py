@@ -28,8 +28,8 @@ def choose_e(totient):
 
 # function to generate RSA public and private keys
 def choose_keys():
-    prime1 = randprime(10**5, 10**6)
-    prime2 = randprime(10**5, 10**6)
+    prime1 = randprime(10**12, 10**13)
+    prime2 = randprime(10**12, 10**13)
     n = prime1 * prime2
     totient = (prime1 - 1) * (prime2 - 1)
     e = choose_e(totient)
@@ -53,6 +53,17 @@ def read_key(file_name):
         key = int(file.readline().strip())
     return n, key
 
+# function to read data from a file
+def read_from_file(file_name):
+    with open(file_name, 'r') as file:
+        return file.read()
+    
+# function to write data to a file    
+def write_to_file(file_name, data):
+    with open(file_name, 'w') as file:
+        file.write(data)
+
+        
 # function to encrypt a message using the RSA algorithm
 def encrypt(message, n, e, block_size=2):
     padding_length = (block_size - (len(message) % block_size)) % block_size
@@ -79,12 +90,10 @@ def decrypt(ciphertext, n, d, block_size=2):
         for j in range(block_size):
             block_chars.append(chr((block >> (8 * j)) & 0xFF))
         decrypted_message.append(''.join(block_chars))
-    
     final_block = decrypted_message[-1]
     padding_length = ord(final_block[-1])
     if padding_length <= block_size:
         decrypted_message[-1] = final_block[:-padding_length]
-    
     return ''.join(decrypted_message)
 
 # function to start the RSA encryption/decryption process
