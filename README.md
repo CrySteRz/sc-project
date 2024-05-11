@@ -9,3 +9,8 @@ Simple implementations of three well-known encryption algorithms: DES (Data Encr
 
 ## Requirements
 - Install sympy for the RSA algorithm
+
+## How to run
+
+- run ```python3 app.py```
+  
